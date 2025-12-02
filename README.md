@@ -1,21 +1,7 @@
-# News Topic Classification with a Feedforward Neural Network
+# News Topic Classification using a Feedforward Neural Network (NumPy Only)
 
-This project implements a **from-scratch feedforward neural network** (no deep learning frameworks) to classify news articles into three topics:
-
-- **Politics**
-- **Sports**
-- **Economy**
-
-It was developed as part of the **COM4513/6513 – Natural Language Processing** assignment at the University of Sheffield.
-
-The full solution is implemented in a Jupyter notebook, including:
-- Custom text preprocessing
-- Manual implementation of forward and backward passes
-- Stochastic Gradient Descent (SGD) training with dropout
-- Experiments with randomly initialised embeddings and pre-trained GloVe embeddings
-- Extension with a deeper network architecture
-
----
+This project implements a **Feedforward Neural Network (FFNN)** for multi-class news topic classification (Politics, Sports, Economy).  
+The entire neural network — embeddings, hidden layers, forward pass, backpropagation, dropout, softmax, and optimisation — is implemented **manually in NumPy**.
 
 ## Dataset
 
@@ -36,157 +22,161 @@ Each instance consists of:
 In the code, labels are shifted to start from 0 (`0, 1, 2`) and one-hot encoded for training.
 
 ---
+## Problem Definition
 
-## Text Preprocessing
+Given an input text (news article), the goal is to predict one of three classes:
 
-The preprocessing pipeline is implemented with NumPy and regular expressions:
+- `0`: Politics  
+- `1`: Sports  
+- `2`: Economy  
 
-1. **Tokenisation**
-   - Text is lowercased.
-   - Tokens are extracted using a regex pattern that keeps alphabetic tokens only.
-
-2. **Stopword Removal**
-   - A custom stopword list is applied (e.g. `a, in, on, at, and, or, to, the, of, ...`).
-
-3. **Vocabulary Construction**
-   - Unigrams are extracted from the training and development sets.
-   - Terms appearing in fewer than a minimum number of documents are filtered out.
-   - Only the top 3,000 most frequent unigrams are kept to control dimensionality and reduce noise.
-
-4. **Indexing**
-   - Two dictionaries are created:
-     - `vocab2id`: word → index  
-     - `id2vocab`: index → word
-   - Each document is represented as a list of vocabulary indices instead of sparse one-hot vectors.
-
-5. **Label Encoding**
-   - Original labels `{1, 2, 3}` are mapped to `{0, 1, 2}` by subtracting 1.
-   - Labels are converted to one-hot vectors.
+This is a **multi-class classification** problem with a **probability distribution output** using softmax.
 
 ---
 
 ## Model Architecture
 
-The core model is a **feedforward neural network** with the following structure:
+### **1. Embedding Layer**
+- Vocabulary size ≈ 3,000 unigrams
+- Each token ID is mapped to a 300-dimensional embedding vector
+- Document embedding = **mean of all token embeddings**
 
-1. **Embedding Layer**
-   - Vocabulary size ≈ 3,000
-   - Embedding dimension: 300
-   - Each document is represented by the mean of its word embeddings:
-     \[
-     h_1 = \frac{1}{|x|} \sum_{i \in x} W_e[i]
-     \]
-   - Implemented as an embedding matrix `W[0]` indexed by word IDs.
+Mathematically:
+h0 = mean( W_emb[ token_indices ] )
 
-2. **Hidden Layer(s)**
-   - Baseline model:
-     - One hidden layer with 128 ReLU units.
-   - Extended model:
-     - Additional hidden layer(s) stacked on top of the first hidden layer.
+where:
+- `W_emb` is the embedding matrix (V × 300)
+- `token_indices` are the vocabulary IDs for the document
 
-   Activation function: ReLU
-   \[
-   \mathrm{ReLU}(z) = \max(0, z)
-   \]
-
-3. **Dropout**
-   - Dropout is applied after each hidden layer with dropout rate 0.2.
-   - Implemented via a binary mask sampled from a Bernoulli distribution and applied elementwise.
-
-4. **Output Layer**
-   - Fully connected layer mapping to 3 classes.
-   - Softmax activation to obtain class probabilities.
-
-5. **Loss**
-   - Categorical cross-entropy:
-     \[
-     \mathcal{L}(y, \hat{y}) = -\sum_{c} y_c \log \hat{y}_c
-     \]
-   - Implemented with numerical stability (clipping + small epsilon inside the log).
-
-6. **Optimisation**
-   - Stochastic Gradient Descent (SGD) with instance-wise updates.
-   - Manual backpropagation is implemented for all layers, including the embedding layer (unless explicitly frozen).
+Two modes supported:
+- **Random embeddings (learnable)**
+- **GloVe embeddings (frozen or learnable)**
 
 ---
 
-## Experiments
+### **2. Hidden Layer (ReLU)**
+A single fully-connected hidden layer:
 
-### 1. Baseline: Randomly Initialised Embeddings
+h1 = ReLU( h0 ⋅ W1 )
 
-- **Architecture**
-  - 300-dimensional embeddings
-  - Hidden layer: 128 units, ReLU
-  - Dropout: 0.2
-
-- **Training**
-  - Learning rate: 0.005
-  - Up to 100 epochs with early stopping based on validation loss
-
-- **Test performance**
-  - Accuracy: **0.84**
-  - Precision (macro): **0.84**
-  - Recall (macro): **0.84**
-  - F1-Score (macro): **0.84**
-
-This model achieves strong and balanced performance across all metrics and serves as the main reference.
+where:
+- `W1` is (300 × 128)
+- ReLU(x) = max(x, 0)
 
 ---
 
-### 2. Pre-trained GloVe Embeddings (Frozen)
+### **3. Dropout (Training Only)**
 
-- 300-dimensional GloVe Common Crawl embeddings are loaded from `glove.840B.300d.txt`.
-- The embedding matrix is initialised from GloVe and **frozen** during training.
-- Same architecture and training setup as the baseline.
+A dropout mask `m` sampled from Bernoulli(1 − dropout_rate):
 
-- **Test performance (frozen GloVe)**
-  - Accuracy: **0.73**
-  - Precision (macro): **0.73**
-  - Recall (macro): **0.73**
-  - F1-Score (macro): **0.73**
-
-Despite using richer pre-trained embeddings, freezing them leads to lower performance than the baseline, likely because the embeddings are not fine-tuned to this specific dataset.
+h1_dropout = h1 * m
 
 ---
 
-### 3. GloVe + Deeper Network
+### **4. Output Layer + Softmax**
 
-- Pre-trained GloVe embeddings (frozen)
-- Extended architecture with additional hidden layer(s) on top of the average embedding
+logits = h1_dropout ⋅ W2
+ŷ = softmax(logits)
 
-- **Test performance (GloVe + deeper network)**
-  - Accuracy: **0.76**
-  - Precision (macro): **0.85**
-  - Recall (macro): **0.78**
-  - F1-Score (macro): **0.75**
+Softmax implementation (numerically stable):
 
-This setup improves precision and recall compared to the simple GloVe model, but it still does not surpass the baseline with randomly initialised embeddings.
+softmax(z) = exp(z - max(z)) / sum( exp(z - max(z)) )
 
 ---
 
-## Learning Curves & Training Behaviour
+### **5. Loss Function: Categorical Cross-Entropy**
+L(y, ŷ) = - sum_over_classes( y_c * log(ŷ_c) )
 
-- Training and validation loss curves are plotted over epochs.
-- For the baseline model:
-  - Training loss decreases steadily.
-  - Validation loss initially decreases and then slowly rises.
-  - Early stopping is triggered once the validation loss change falls below a small tolerance, preventing overfitting and unnecessary computation.
+Where:
+- `y` is the one-hot true label vector
+- `ŷ` is the predicted probability distribution
+
+Only the log-probability of the true class contributes to the loss.
+
+---
+
+### **6. Optimisation: Stochastic Gradient Descent (SGD)**
+
+SGD is performed **instance-by-instance**:
+
+W ← W - lr * ∇W(L)
+
+Backpropagation is implemented manually:
+
+- gradient of softmax + cross-entropy  
+- gradient through dropout  
+- gradient through ReLU  
+- gradient through fully-connected layers  
+- optional: gradient blocked for frozen embeddings (GloVe)
 
 ---
 
-## Error Analysis (High-Level)
+## Text Preprocessing Pipeline
+The preprocessing pipeline is implemented with NumPy and regular expressions:
 
-The error analysis in the notebook highlights several patterns:
+1. **Regex tokenisation**  
+   Extract alphabetic tokens (`[A-Za-z]+`), convert to lowercase.
 
-- **False positives**  
-  Some articles are predicted as a given class (e.g. sports) when they actually belong to another (e.g. politics), usually when they share overlapping vocabulary.
+2. **Stopword removal**
 
-- **False negatives**  
-  Some true class instances are missed, suggesting recall could be further improved.
+3. **Document frequency filtering**  
+   Remove tokens appearing in fewer than 2 documents.
 
-- **Class confusion**  
-  Misclassifications often happen between semantically related topics or when the article is short and lacks clear topic-specific keywords.
+4. **Top-N pruning**  
+   Keep the top 3,000 unigrams by frequency.
 
-Overall, the model generalises well but could be further improved with more sophisticated architectures or additional features.
+5. **Vocabulary mapping**  
+   - `vocab2id`: token → integer ID  
+   - `id2vocab`: integer ID → token
+
+6. **Document to index conversion**  
+   Every document becomes a list of token IDs.
+
+7. **One-hot encoding for labels**  
+   For 3 classes:
+y = [1,0,0], [0,1,0], or [0,0,1]
 
 ---
+
+##  Model Performance
+
+### **Baseline (Random Initial Embeddings)**
+- Accuracy: **0.84**
+- Precision (macro): **0.84**
+- Recall (macro): **0.84**
+- F1-score (macro): **0.84**
+
+This is the strongest model.
+
+---
+
+### **GloVe Embeddings (Frozen)**
+- Accuracy: **0.73**
+
+Freezing embeddings limits adaptability to this dataset.
+
+---
+
+### **GloVe + Additional Hidden Layer**
+- Accuracy: **0.76**
+- Precision (macro): **0.85**
+- F1-score (macro): **0.75**
+
+Adding depth improves expressiveness but still underperforms the baseline.
+
+---
+
+## Training Behaviour
+
+- **Training loss decreases smoothly**
+- **Validation loss decreases, then rises slightly**
+- Early stopping triggers based on a tolerance threshold to prevent overfitting
+- Loss curves help visualise convergence and generalisation
+
+Figures provided:
+- baseline loss curve
+- GloVe loss curve
+- metrics bar plot
+
+
+
